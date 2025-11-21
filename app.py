@@ -15,7 +15,7 @@ load_dotenv()
 
 APP_VERSION = os.getenv("APP_VERSION", "v1.0")
 PANEL_USER = os.getenv("PANEL_USER", "admin")
-PANEL_PASS = os.getenv("PANEL_PASS", "1234")
+PANEL_PASS = os.getenv("PANEL_PASS", "Phechr")
 PORT = int(os.getenv("PORT", "8090"))
 DOWNLOAD_ENABLED_FLAG = os.getenv("DOWNLOAD_ENABLED", "1")  # "1" enabled / "0" disabled
 
