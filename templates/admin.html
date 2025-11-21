@@ -1,0 +1,44 @@
+
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <h2>แผงควบคุม</h2>
+  <form method="post" action="{{ url_for('admin_toggle') }}" onsubmit="return confirm('ยืนยันเปลี่ยนสถานะดาวน์โหลด?')">
+    <div class="formrow">
+      <label>สถานะดาวน์โหลด:</label>
+      <select name="enable">
+        <option value="1" {% if enabled %}selected{% endif %}>เปิด</option>
+        <option value="0" {% if not enabled %}selected{% endif %}>ปิด</option>
+      </select>
+    </div>
+    <button class="btn success">บันทึก</button>
+    <a class="btn danger" href="{{ url_for('admin_logout') }}">ออกจากระบบ</a>
+    <button formaction="{{ url_for('admin_restart') }}" formmethod="post" class="btn" onclick="return confirm('ยืนยันรีสตาร์ท?')">รีสตาร์ทเว็บ (จำลอง)</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3>ประวัติการดาวน์โหลดล่าสุด</h3>
+  <div class="table">
+    <div class="tr head">
+      <div>เวลา (UTC)</div>
+      <div>รูปแบบ</div>
+      <div>คุณภาพ</div>
+      <div>ชื่อที่ตั้งไฟล์</div>
+      <div>ลิงก์ (URL)</div>
+    </div>
+    {% for h in history %}
+      <div class="tr">
+        <div>{{ h.when }}</div>
+        <div>{{ h.format }}</div>
+        <div>{{ h.quality or '-' }}</div>
+        <div>{{ h.title }}</div>
+        <div class="wrap">{{ h.url }}</div>
+      </div>
+    {% endfor %}
+    {% if not history %}
+      <div class="tr"><div colspan="5">ยังไม่มีข้อมูล</div></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
