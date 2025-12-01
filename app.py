@@ -1,4 +1,3 @@
-
 import os
 import re
 import json
@@ -40,8 +39,10 @@ YOUTUBE_SINGLE_RE = re.compile(r"^https?://(www\.)?(youtube\.com|youtu\.be)/", r
 TIKTOK_RE = re.compile(r"^https?://([^/]+\.)?tiktok\.com/", re.I)
 BILIBILI_RE = re.compile(r"^https?://(?:(?:[^/]+\.)?bilibili\.com|b23\.tv|bili\.im)/", re.I)
 
+
 def is_single_video(url: str) -> bool:
     return ("list=" not in url) and ("playlist" not in url)
+
 
 def _append_history(data):
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -55,25 +56,27 @@ def _append_history(data):
     except Exception as e:
         print("history write error:", e)
 
+
 def ydl_hook(job_id):
     def hook(d):
         with jobs_lock:
             job = jobs.get(job_id)
             if not job:
                 return
-            if d.get('status') == 'downloading':
-                total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
-                downloaded = d.get('downloaded_bytes') or 0
+            if d.get("status") == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                downloaded = d.get("downloaded_bytes") or 0
                 p = 0
                 if total:
                     p = int(downloaded * 100 / total)
-                job['progress'] = min(max(p, 0), 100)
-                job['speed'] = d.get('speed')
-                job['eta'] = d.get('eta')
-                job['status'] = 'downloading'
-            elif d.get('status') == 'finished':
-                job['progress'] = 100
-                job['status'] = 'processing'
+                job["progress"] = min(max(p, 0), 100)
+                job["speed"] = d.get("speed")
+                job["eta"] = d.get("eta")
+                job["status"] = "downloading"
+            elif d.get("status") == "finished":
+                job["progress"] = 100
+                job["status"] = "processing"
+
     return hook
 
 
@@ -85,7 +88,13 @@ def run_download(job_id, url, fmt, title_override, quality=None, source="youtube
         "quiet": True,
         "no_warnings": True,
         "progress_hooks": [ydl_hook(job_id)],
+        # ช่วยให้โหลดคลิปยาว/คลิป HLS ได้เสถียรขึ้น
+        "concurrent_fragment_downloads": 1,
+        "hls_use_mpegts": True,
+        "retries": 10,
+        "fragment_retries": 10,
     }
+
     # ใช้ cookies.txt เฉพาะ YouTube เท่านั้น
     if source == "youtube" and COOKIE_FILE.exists():
         opts["cookiefile"] = str(COOKIE_FILE)
@@ -94,7 +103,11 @@ def run_download(job_id, url, fmt, title_override, quality=None, source="youtube
         # เสียงอย่างเดียว ใช้ bestaudio แล้วแปลงเป็น MP3
         opts["format"] = "bestaudio/best"
         opts["postprocessors"] = [
-            {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"},
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            },
             {"key": "FFmpegMetadata"},
         ]
     else:  # mp4
@@ -107,14 +120,7 @@ def run_download(job_id, url, fmt, title_override, quality=None, source="youtube
             }
             if COOKIE_FILE.exists():
                 probe_opts["cookiefile"] = str(COOKIE_FILE)
-            # TikTok: เลือกฟอร์แมตจากรายการจริง แบ่งเป็น ต่ำสุด / กลาง / สูงสุด และพยายามเลี่ยงลายน้ำ
-            probe_opts = {
-                "quiet": True,
-                "no_warnings": True,
-                "noplaylist": True,
-            }
-            if COOKIE_FILE.exists():
-                probe_opts["cookiefile"] = str(COOKIE_FILE)
+
             with yt_dlp.YoutubeDL(probe_opts) as info_ydl:
                 info = info_ydl.extract_info(url, download=False)
 
@@ -160,85 +166,107 @@ def run_download(job_id, url, fmt, title_override, quality=None, source="youtube
                 except ValueError:
                     specified_height = None
 
-            if specified_height:
-                # โหมดเจาะจง: ใช้ค่าความสูงที่ผู้ใช้เลือกเป็นเพดานสูงสุด
-                h = int(specified_height)
-                opts["format"] = (
-                    f"bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]/"
-                    f"best[ext=mp4][height<={h}]/best[height<={h}]"
-                )
-            else:
-                # โหมดโดยรวม (low/medium/high) ให้เลือกความละเอียดแบบไดนามิกตามวิดีโอ
-                probe_opts = {
-                    "quiet": True,
-                    "no_warnings": True,
-                    "noplaylist": True,
-                }
-                if COOKIE_FILE.exists():
-                    probe_opts["cookiefile"] = str(COOKIE_FILE)
-                try:
-                    with yt_dlp.YoutubeDL(probe_opts) as probe_ydl:
-                        info2 = probe_ydl.extract_info(url, download=False)
-                    fmts2 = info2.get("formats") or []
-                    video_fmts2 = [f for f in fmts2 if f.get("vcodec") not in (None, "none")]
-                    heights = sorted({f.get("height") for f in video_fmts2 if f.get("height")})
-                except Exception:
-                    heights = []
-                if not heights:
-                    # ถ้าอ่านความละเอียดไม่ได้ ให้ fallback ไปใช้ mapping เดิม
-                    max_h = 1080
-                    if quality == "medium":
-                        max_h = 720
-                    elif quality == "low":
-                        max_h = 480
-                    if source == "bilibili":
-                        opts["format"] = (
-                            f"bestvideo[height<={max_h}]+bestaudio/"
-                            f"best[height<={max_h}]/best"
-                        )
+            # --------- BILIBILI: ใช้รูปแบบที่ไม่พังกับคลิปยาว ----------
+            if source == "bilibili":
+                # ถ้ามีค่าแบบเจาะจง (1080p/720p/480p) ให้ประมาณจากความสูง
+                h = None
+                if specified_height:
+                    h = specified_height
+                else:
+                    if quality == "low":
+                        h = 480
+                    elif quality == "medium":
+                        h = 720
                     else:
+                        h = None  # สูงสุด
+
+                if h:
+                    # ใช้ bv*+ba โดยมีเพดานความสูง (ปล่อยให้ yt-dlp เลือก format ที่ตรงที่สุดเอง)
+                    opts["format"] = (
+                        f"bv*[height<={h}]+ba/best[height<={h}]/best"
+                    )
+                else:
+                    # ไม่จำกัดความสูง → เอาคุณภาพสูงสุด
+                    opts["format"] = "bv*+ba/best"
+
+                opts["merge_output_format"] = "mp4"
+
+            else:
+                # --------- YouTube และแพลตฟอร์มอื่น ----------
+                if specified_height:
+                    # โหมดเจาะจง: ใช้ค่าความสูงที่ผู้ใช้เลือกเป็นเพดานสูงสุด
+                    h = int(specified_height)
+                    opts["format"] = (
+                        f"bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]/"
+                        f"best[ext=mp4][height<={h}]/best[height<={h}]"
+                    )
+                else:
+                    # โหมดโดยรวม (low/medium/high) ให้เลือกความละเอียดแบบไดนามิกตามวิดีโอ
+                    probe_opts = {
+                        "quiet": True,
+                        "no_warnings": True,
+                        "noplaylist": True,
+                    }
+                    if COOKIE_FILE.exists():
+                        probe_opts["cookiefile"] = str(COOKIE_FILE)
+                    try:
+                        with yt_dlp.YoutubeDL(probe_opts) as probe_ydl:
+                            info2 = probe_ydl.extract_info(url, download=False)
+                        fmts2 = info2.get("formats") or []
+                        video_fmts2 = [
+                            f for f in fmts2 if f.get("vcodec") not in (None, "none")
+                        ]
+                        heights = sorted(
+                            {f.get("height") for f in video_fmts2 if f.get("height")}
+                        )
+                    except Exception:
+                        heights = []
+
+                    if not heights:
+                        # ถ้าอ่านความละเอียดไม่ได้ ให้ fallback ไปใช้ mapping เดิม
+                        max_h = 1080
+                        if quality == "medium":
+                            max_h = 720
+                        elif quality == "low":
+                            max_h = 480
+
                         opts["format"] = (
                             f"bestvideo[ext=mp4][height<={max_h}]+bestaudio[ext=m4a]/"
                             f"best[ext=mp4][height<={max_h}]/best[height<={max_h}]"
                         )
-                else:
-                    min_h = min(heights)
-                    max_h = max(heights)
-                    mid_h = heights[len(heights)//2]
-
-                    if quality == "low":
-                        target = None
-                        for h in heights:
-                            if h >= 240:
-                                target = h
-                                break
-                        if target is None:
-                            target = min_h
-                    elif quality == "medium":
-                        target = mid_h
                     else:
-                        target = max_h
+                        min_h = min(heights)
+                        max_h = max(heights)
+                        mid_h = heights[len(heights) // 2]
 
-                    h = int(target)
-                    if source == "bilibili":
-                        opts["format"] = (
-                            f"bestvideo[height<={h}]+bestaudio/"
-                            f"best[height<={h}]/best"
-                        )
-                    else:
+                        if quality == "low":
+                            target = None
+                            for h in heights:
+                                if h >= 240:
+                                    target = h
+                                    break
+                            if target is None:
+                                target = min_h
+                        elif quality == "medium":
+                            target = mid_h
+                        else:
+                            target = max_h
+
+                        h = int(target)
                         opts["format"] = (
                             f"bestvideo[ext=mp4][height<={h}]+bestaudio[ext=m4a]/"
                             f"best[ext=mp4][height<={h}]/best[height<={h}]"
                         )
-            opts["merge_output_format"] = "mp4"
+
+                opts["merge_output_format"] = "mp4"
 
     # ถ้าเป็นไฟล์วิดีโอ MP4 ให้ดึง thumbnail มาด้วย (ไม่ฝังลงไฟล์เพื่อลดบั๊ก)
     if fmt == "mp4":
         opts["writethumbnail"] = True
 
     try:
-        # แก้กรณีลิงก์สั้น Bilibili เช่น https://bili.im/XXXX ให้ตาม redirect ก่อน
-        if "bili.im/" in url:
+        # แก้กรณีลิงก์สั้น Bilibili เช่น https://bili.im/XXXX หรือ https://b23.tv/XXXX ให้ตาม redirect ก่อน
+        if any(s in url for s in ("bili.im/", "b23.tv/")):
             try:
                 r = requests.get(url, allow_redirects=True, timeout=10)
                 if r.url:
@@ -257,32 +285,39 @@ def run_download(job_id, url, fmt, title_override, quality=None, source="youtube
             else:
                 file_path = DL_DIR / f"{job_id}.mp4"
 
-            display_name = title_override.strip() if title_override else info.get("title", "download")
+            display_name = title_override.strip() if title_override else info.get(
+                "title", "download"
+            )
             with jobs_lock:
                 jobs[job_id]["status"] = "done"
                 jobs[job_id]["file"] = str(file_path)
                 jobs[job_id]["title"] = display_name
-            _append_history({
-                "when": datetime.utcnow().isoformat() + "Z",
-                "url": url,
-                "format": fmt,
-                "quality": quality if fmt == "mp4" else "",
-                "title": display_name,
-                "file": str(file_path.name)
-            })
+            _append_history(
+                {
+                    "when": datetime.utcnow().isoformat() + "Z",
+                    "url": url,
+                    "format": fmt,
+                    "quality": quality if fmt == "mp4" else "",
+                    "title": display_name,
+                    "file": str(file_path.name),
+                }
+            )
     except Exception as e:
         with jobs_lock:
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"] = str(e)
 
+
 @app.context_processor
 def inject_globals():
     return {"APP_VERSION": APP_VERSION}
+
 
 @app.route("/")
 def index():
     enabled = os.getenv("DOWNLOAD_ENABLED", DOWNLOAD_ENABLED_FLAG) == "1"
     return render_template("index.html", enabled=enabled)
+
 
 @app.post("/api/create")
 def api_create():
@@ -330,11 +365,14 @@ def api_create():
             "status": "queued",
             "progress": 0,
             "file": None,
-            "title": None
+            "title": None,
         }
-    t = threading.Thread(target=run_download, args=(job_id, url, fmt, title, quality, source), daemon=True)
+    t = threading.Thread(
+        target=run_download, args=(job_id, url, fmt, title, quality, source), daemon=True
+    )
     t.start()
     return jsonify({"ok": True, "job_id": job_id})
+
 
 @app.get("/api/progress/<job_id>")
 def api_progress(job_id):
@@ -344,6 +382,7 @@ def api_progress(job_id):
             return jsonify({"ok": False, "error": "not_found"}), 404
         return jsonify({"ok": True, "job": job})
 
+
 @app.get("/download/<job_id>")
 def download_file(job_id):
     with jobs_lock:
@@ -351,17 +390,24 @@ def download_file(job_id):
         if not job or job.get("status") != "done" or not job.get("file"):
             return "Not ready", 404
         filename = job.get("title") or Path(job["file"]).name
-        return send_file(job["file"], as_attachment=True, download_name=filename + Path(job["file"]).suffix)
+        return send_file(
+            job["file"],
+            as_attachment=True,
+            download_name=filename + Path(job["file"]).suffix,
+        )
+
 
 # ---------------- Admin Panel ----------------
 def _login_required():
     return ("admin_logged" in session) and session["admin_logged"] is True
+
 
 @app.get("/admin/login")
 def admin_login_page():
     if _login_required():
         return redirect(url_for("admin_home"))
     return render_template("admin_login.html")
+
 
 @app.post("/admin/login")
 def admin_login():
@@ -374,10 +420,12 @@ def admin_login():
     flash("ชื่อผู้ใช้/รหัสผ่านไม่ถูกต้อง", "err")
     return redirect(url_for("admin_login_page"))
 
+
 @app.get("/admin/logout")
 def admin_logout():
     session.clear()
     return redirect(url_for("admin_login_page"))
+
 
 @app.get("/admin")
 def admin_home():
@@ -392,6 +440,7 @@ def admin_home():
         pass
     return render_template("admin.html", enabled=enabled, history=hist[-100:][::-1])
 
+
 @app.post("/admin/toggle")
 def admin_toggle():
     if not _login_required():
@@ -401,6 +450,7 @@ def admin_toggle():
     flash("เปิดดาวน์โหลด" if val else "ปิดดาวน์โหลด", "ok")
     return redirect(url_for("admin_home"))
 
+
 @app.post("/admin/restart")
 def admin_restart():
     if not _login_required():
@@ -409,6 +459,7 @@ def admin_restart():
     # here we just flash message.
     flash("ทำการรีสตาร์ท (จำลอง) แล้ว", "ok")
     return redirect(url_for("admin_home"))
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, debug=False)
