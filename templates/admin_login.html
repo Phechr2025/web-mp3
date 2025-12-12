@@ -1,0 +1,18 @@
+
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <h2>เข้าสู่ระบบหลังบ้าน</h2>
+  <form method="post" action="{{ url_for('admin_login') }}">
+    <div class="formrow">
+      <label>ผู้ใช้</label>
+      <input name="user" required>
+    </div>
+    <div class="formrow">
+      <label>รหัสผ่าน</label>
+      <input name="pass" type="password" required>
+    </div>
+    <button class="btn primary">เข้าสู่ระบบ</button>
+  </form>
+</section>
+{% endblock %}
