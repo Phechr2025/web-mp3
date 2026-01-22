@@ -1,0 +1,7 @@
+Flask==3.1.2
+yt-dlp
+python-dotenv
+gunicorn
+requests
+flask
+yt-dlp
