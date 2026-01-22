@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <h2>ดาวน์โหลดวิดีโอเป็น MP3/MP4</h2>
+  {% if not enabled %}
+    <div class="warn">ขณะนี้ปิดการดาวน์โหลดชั่วคราว</div>
+  {% endif %}
+
+  <div class="formrow">
+    <label>ลิงก์วิดีโอ</label>
+    <input id="url" placeholder="http:// หรือ https://">
+  </div>
+
+  <div class="formrow">
+    <label>เลือกแอปที่จะดาวน์โหลด</label>
+    <select id="source">
+      {% if platforms.youtube %}<option value="youtube">YouTube</option>{% endif %}
+      {% if platforms.tiktok %}<option value="tiktok">TikTok</option>{% endif %}
+      {% if platforms.bilibili %}<option value="bilibili">Bilibili</option>{% endif %}
+      {% if platforms.instagram %}<option value="instagram">Instagram</option>{% endif %}
+      {% if platforms.facebook %}<option value="facebook">Facebook</option>{% endif %}
+    </select>
+  </div>
+
+  <div class="formrow">
+    <label>ตั้งชื่อไฟล์ (ไม่ใส่ = ใช้ชื่อจากวิดีโอ)</label>
+    <input id="title" placeholder="เช่น เพลงของฉัน">
+  </div>
+
+  <div class="formrow">
+    <label>รูปแบบไฟล์</label>
+    <select id="format">
+      <option value="mp3">MP3 (เสียง)</option>
+      <option value="mp4">MP4 (วิดีโอ)</option>
+    </select>
+  </div>
+
+  <div class="formrow hide" id="mp4ModeRow">
+    <label>ตัวเลือกคุณภาพ (เฉพาะ MP4)</label>
+    <select id="mp4Mode">
+      <option value="range">โดยรวม (ต่ำ/กลาง/สูง)</option>
+      <option value="exact">เจาะจง (เช่น 480p/720p/1080p)</option>
+    </select>
+  </div>
+
+  <div class="formrow hide" id="qualityRow">
+    <label>คุณภาพวิดีโอโดยรวม (เฉพาะ MP4)</label>
+    <select id="quality">
+      <option value="high">สูง</option>
+      <option value="medium">กลาง</option>
+      <option value="low">ต่ำ</option>
+    </select>
+  </div>
+
+  <div class="formrow hide" id="qualityExactRow">
+    <label>ความละเอียดแบบเจาะจง (เฉพาะ MP4)</label>
+    <select id="qualityExact">
+      <option value="144p">144p</option>
+      <option value="240p">240p</option>
+      <option value="360p">360p</option>
+      <option value="480p">480p</option>
+      <option value="720p">720p (HD)</option>
+      <option value="1080p">1080p (Full HD)</option>
+    </select>
+  </div>
+
+  <button id="btnStart" class="btn primary" {% if not enabled %}disabled{% endif %}>เริ่มดาวน์โหลด</button>
+
+  <div id="confirm" class="confirm hide">
+    <div class="confirm-box">
+      <h3>ยืนยันการดาวน์โหลด</h3>
+      <p style="margin-top:4px;margin-bottom:10px;color:var(--muted);font-size:14px">
+        ตรวจสอบลิงก์, แอปที่เลือก และรูปแบบไฟล์ให้ถูกต้องก่อนเริ่มดาวน์โหลด
+      </p>
+      <div class="btnrow">
+        <button id="confirmYes" class="btn primary">ยืนยัน</button>
+        <button id="confirmNo" class="btn">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="progressWrap" class="progress hide">
+    <div class="bar"><span id="bar" style="width:0%"></span></div>
+    <div id="label">0%</div>
+  </div>
+
+  <div id="doneWrap" class="hide" style="display:none">
+    <a id="dlLink" class="btn success pulse">ดาวน์โหลดไฟล์</a>
+  </div>
+</section>
+{% endblock %}
